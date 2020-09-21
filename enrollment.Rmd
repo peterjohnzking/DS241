@@ -1,0 +1,33 @@
+---
+title: "Class Enrollment Analysis"
+output: html_notebook
+---
+
+## Load packages
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(skimr)
+library(summarytools)
+```
+
+
+Loads the enrollment data from the excel spreadsheet
+
+```{r}
+dfa <- read_xlsx("CU_ACAD_DEPT_ENRL.xlsx") %>% clean_names()
+```
+
+```{r}
+
+skim(dfa)
+```
+```{r}
+c <- dfa %>% group_by(subject) %>% skim()
+```
+
+```{r}
+dfa %>% dfSummary() %>% view()
+```
