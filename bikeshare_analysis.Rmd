@@ -1,0 +1,142 @@
+---
+title: "Bikeshare Analysis"
+author: "Peter-John King"
+date: "21 Sep 2020"
+output: html_notebook
+---
+
+The intention of this analysis is to predict the number of students who will be enrolled 
+in MA132 for Spring 2021
+
+## Prepare Workspace 
+
+### Load packages
+
+We will work primarily within the context of the tidyverse set of packages, with a few additional packages supporting exploratory analysis. I have included the `lubridate` package, as we will want to do some work with dates.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(skimr)
+library(summarytools)
+library(lubridate)
+```
+
+
+## Data
+
+I am not using the file that (a) started on moodle for which we, (b) computed a couple of extra variables (for duration, hour of day, and day of week), and (c) saved as .xlsx file.
+
+The orginal source of the data was the csv file
+
+https://s3.amazonaws.com/capitalbikeshare-data/202008-capitalbikeshare-tripdata.zip
+
+so I will use that original source data so that my research is more reproducible.
+
+### Read the data
+I read the original .csv file and add in the variables (mutate) that we did manually when we played with the creation of the data table. I will call these new variables: `duration_min`, `hour_of_day`. Also I will add day of week, but it won’t match the format from excel.
+
+
+```{r}
+dfa= read_csv("202008-capitalbikeshare-tripdata.csv") %>% 
+  clean_names() %>%
+  mutate(duration=as.numeric((ended_at-started_at)/60),
+         hour_of_day=hour(started_at),
+         day_of_week=wday(started_at,label = T))
+```
+We summarize that dataframe to identify data types, missing data, et cetera.
+
+```{r}
+
+skim(dfa)
+```
+
+## A histogram - like we did in class
+
+As we discussed in class, we might be interested in looking at histogram of durations, broken out for each day of the week. Here I filter to positive duration shorter than 100 minutes.
+
+```{r}
+
+dfa %>% filter(duration<100,duration>0) %>% 
+  ggplot(aes(x=duration)) + geom_histogram(bins = 300)+facet_wrap(~day_of_week)
+
+```
+
+## Cleaning
+
+Before we do further analysis, we recognize that if the duration is negative, some piece of the time data is corrupt. Although it sill reduce the size of our dataset, it is very much large enough to permit continued analysis even after removing those rows.
+
+Limit to durations that are positive.
+
+```{r}
+
+dfb=dfa %>% filter(duration>0)
+
+```
+## Some visual exploration 
+
+Can a scatterplot be revealing? Many possibilities, but I have decided to focus on “short” trips (duration less than an hour) for a particular day (the 3rd day of the month).
+
+Does the trip duration have a pattern when plotted vs. starting time?
+
+```{r}
+
+dfb %>% filter(mday(started_at)==3,duration<60) %>% ggplot(aes(x=started_at,y=duration))+
+  geom_point(alpha=.1)+
+  ggtitle("Trip duration vs start time (August 3)")
+
+```
+
+## Riders vs time
+
+
+How many bikes are being used at any given time of day?
+
+select the column we need
+pivot longer call on column "type" and the other "t"
+
+mutate to create an "increment" (+1 or -1) - use "case_when"
+
+arrange (based on t)
+
+mutate (bikes) using cumsum
+
+
+
+
+
+```{r}
+dfr1 = dfb %>%
+  filter(month(started_at)==8, month(ended_at)==8) %>%
+  select(rideable_type, start=started_at,end=ended_at) %>%
+  pivot_longer(start:end,names_to="type",values_to="t") %>% arrange(t) %>%
+  mutate(increment=case_when(
+    type=="start"~ 1,
+    type=="end"~ -1
+  )) %>%
+  group_by(rideable_type) %>%
+  mutate(riders=cumsum(increment))
+  
+dfr2 = dfb %>%
+  filter(month(started_at)==8, month(ended_at)==8) %>%
+  select(start=started_at,end=ended_at) %>%
+  pivot_longer(start:end,names_to="type",values_to="t") %>% arrange(t) %>%
+  mutate(increment=case_when(
+    type=="start"~ 1,
+    type=="end"~ -1
+  )) %>%
+  mutate(riders=cumsum(increment))
+
+
+  
+
+```
+
+
+
+How many riders (max in any hour time interval)
+
+```{r}
+dfrh = dfr2 %>% group_by(hour(t)) %>% summarise(max_rider = max(riders),avg_rider = mean(riders))
+```

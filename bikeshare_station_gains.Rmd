@@ -1,0 +1,85 @@
+---
+title: "Bikeshare Analysis"
+author: "Peter-John King"
+date: "21 Sep 2020"
+output: html_notebook
+---
+
+The intention of this analysis is to determine which bike stations have the most "gains" in the number of 
+bikes over time
+
+## Prepare Workspace 
+
+### Load packages
+
+We will work primarily within the context of the tidyverse set of packages, with a few additional packages supporting exploratory analysis. I have included the `lubridate` package, as we will want to do some work with dates.
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(skimr)
+library(summarytools)
+library(lubridate)
+```
+
+
+## Data
+
+### Read the data
+We read the original .csv file and add in the variables (mutate) that we did manually when we played with the creation of the data table. I will call these new variables: `duration_min`, `hour_of_day`. Also I will add day of week, but it won’t match the format from excel.
+
+
+```{r}
+dfa= read_csv("202008-capitalbikeshare-tripdata.csv") %>% 
+  clean_names() %>%
+  mutate(duration=as.numeric((ended_at-started_at)/60),
+         hour_of_day=hour(started_at),
+         day_of_week=wday(started_at,label = T))
+```
+We summarize that dataframe to identify data types, missing data, et cetera.
+
+```{r}
+
+skim(dfa)
+```
+
+## Cleaning
+
+Before we do further analysis, we recognize that if the duration is negative, some piece of the time data is corrupt. Although it sill reduce the size of our dataset, it is very much large enough to permit continued analysis even after removing those rows.
+
+Limit to durations that are positive.
+
+```{r}
+
+dfb=dfa %>% filter(duration>0)
+dfb$census_start <- apply(coord, 1, function(row) call_geolocator_latlon(row['start_lat'], row['start_lng']))
+
+```
+## Summarizing Starts and Ends
+
+In this section we do the following tasks:
+* Use summarise to create a dataframe that counts the number of "starts" from each station ID
+* Use summarise to create a dataframe that counts the number of "ends" from each station ID.
+
+We do this so that we determine the net gains (or losses) in the number of bikes at each station over time
+
+```{r}
+
+df_start = dfb %>% count(start_station_id) %>% rename(station_id = start_station_id)
+df_end = dfb %>% count(end_station_id) %>% rename(station_id = end_station_id)
+
+df_join = df_start %>% full_join(df_end, by = "station_id") %>% rename(start_num = n.x) %>% rename(end_num = n.y) 
+```
+
+## Calculate net gain
+
+In this section we do the following taks
+* Join the data frames computed in the previous step
+* Calculate the net gains  
+
+```{r}
+
+df_join = df_start %>% full_join(df_end, by = "station_id") %>% rename(start_num = n.x) %>% rename(end_num = n.y) 
+df_join = df_join %>% mutate(gain = end_num - start_num)
+```

@@ -1,0 +1,96 @@
+---
+title: "MA132 Enrollment Analysis"
+author: "Peter-John King"
+date: "21 Sep 2020"
+output: html_notebook
+---
+
+The intention of this analysis is to predict the number of students who will be enrolled 
+in MA132 for Spring 2021
+
+## Load packages
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(readxl)
+library(skimr)
+library(summarytools)
+```
+
+
+## Read and clean the data
+Loads the enrollment data from the excel spreadsheet
+
+```{r}
+dfa <- read_xlsx("data/CU_ACAD_DEPT_ENRL.xlsx") %>% clean_names()
+```
+
+```{r}
+
+skim(dfa)
+```
+
+### Tidy Data
+
+Let us separate column term 2 into two variables 
+```{r}
+
+dfa <- dfa %>% separate(term2, c("semester", "year"), " ")
+
+```
+
+### Clean and Subset Data
+
+We get rid of the following variables:
+
+* acad_org
+* current_status
+* professor
+* course_id
+
+Filtering to only include:
+* math courses
+* catalog number 131 and 132
+* lectures
+
+We make the year numeric 
+
+We remove duplicate data 
+
+```{r}
+
+dfb <- dfa %>% select(subject:component) %>% 
+  filter(subject == "MA") %>% filter (catalog %in% c("131", "132")) %>%
+  filter(component == "LEC") %>% select(-component) %>% distinct() %>%
+  mutate(year=as.numeric(year))
+```
+
+Now, we find the total students enrolled in each smester
+```{r}
+dfc <- dfb %>% group_by(catalog, semester, year) %>%
+  summarize(tot_enrl = sum(tot_enrl)) %>%
+  filter(year!=2021)
+
+
+```
+
+In order to compare using a scatterplot, I will need to make a "wide" dataframe.
+
+Additional, We want to consider the "previous" fall, so we add a column to the dataframe which is lagged.  
+
+We remove 2021, as there is no valid data.
+
+```{r}
+dfd <- dfc %>% pivot_wider(values_from = tot_enrl,names_from=c(semester,catalog)) %>% 
+  clean_names() %>%
+  mutate(prev_131_fall=lag(fall_131),prev_132_fall=lag(fall_132)) %>% 
+  filter(year!=2021)
+```
+
+We now plot fall ma 131 with spring ma 132 to see if a correlation exists. We found that with the exception of 2014, we found that a linear correlation existed. 
+
+
+```{r}
+dfd %>% ggplot(aes(x=prev_131_fall,y=spring_132)) +geom_point()
+```

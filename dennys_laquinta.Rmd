@@ -1,0 +1,283 @@
+---
+title: "Lab 05 - La Quinta is Spanish for *next to Denny's*, Pt. 2"
+subtitle: "Wrangling spatial data"
+author: "Peter-John"
+output: 
+  tufte::tufte_html:
+    tufte_variant: "envisioned"
+    highlight: pygments
+    css: ../lab.css
+link-citations: yes
+---
+
+```{r include=FALSE}
+library(tufte)
+library(knitr)
+options(
+  htmltools.dir.version = FALSE, # for blogdown
+  show.signif.stars = FALSE,     # for regression output
+  digits = 2
+  )
+knitr::opts_chunk$set(eval = FALSE)
+```
+
+In this lab, we use the Denny's and La Quinta Inn and Suites data to determine whether for
+all La Quinta Inns, there exists a Denny's nearby 
+
+## Getting started
+
+In this lab we will use the **tidyverse** and **dsbox** packages.
+
+```{r}
+library(tidyverse) 
+library(dsbox) 
+```
+
+## The data
+
+The datasets we'll use are called `dennys` and `laquinta` from the **dsbox** package. 
+
+```{r}
+dn <- dennys
+lq <- laquinta
+
+```
+
+## Exercises
+
+To determine the efficacy of our method, we first test on Alaska. To do this, we filter the `dennys` and `laquinta` dataset for locations in Alaska. 
+
+   
+```{r}
+dn_ak <- dn %>%
+  filter(state == "AK")
+
+lq_ak <- lq %>%
+  filter(state == "AK")
+
+```
+
+
+Next we'll calculate the distance between all Denny's and all La Quinta locations in Alaska. Let's take this step by step:
+
+**Step 1:** There are 3 Denny's and 2 La Quinta locations in Alaska. 
+
+**Step 2:** Let's focus on the first Denny's location. We'll need to 
+calculate two distances for it: (1) distance between Denny's 1 and 
+La Quinta 1 and (2) distance between Denny's 1 and La Quinta (2).
+
+**Step 3:** Now let's consider all Denny's locations.
+
+In order to calculate these distances we need to first restructure our data to pair the Denny's and La Quinta locations. To do so, we will join the two data frames using `full_join`.
+
+Let's join the data on Denny's and La Quinta locations in Alaska, and take 
+a look at what it looks like:
+
+```{r}
+dn_lq_ak <- full_join(dn_ak, lq_ak, by = "state")
+dn_lq_ak
+```
+
+Now that we have the data in the format we wanted, all that is left is to 
+calculate the distances between the pairs.
+
+One way of calculating the distance between any two points on the earth is to use the Haversine distance formula. This formula takes into account the fact that the earth is not flat, but instead spherical.
+
+```{r}
+haversine <- function(long1, lat1, long2, lat2, round = 3) {
+  # convert to radians
+  long1 = long1 * pi / 180
+  lat1  = lat1  * pi / 180
+  long2 = long2 * pi / 180
+  lat2  = lat2  * pi / 180
+  
+  R = 6371 # Earth mean radius in km
+  
+  a = sin((lat2 - lat1)/2)^2 + cos(lat1) * cos(lat2) * sin((long2 - long1)/2)^2
+  d = R * 2 * asin(sqrt(a))
+  
+  return( round(d,round) ) # distance in km
+}
+```
+
+This function takes five arguments:
+
+- Longitude and latitude of the first location
+- Longitude and latitude of the second location
+- A parameter by which to round the responses
+
+We calculated the distances between all pairs of Denny's and La Quinta locations and saved this variable as `distance`.
+
+```{r}
+
+dn_lq_ak <- dn_lq_ak %>% mutate(distance = haversine(longitude.x, latitude.x, longitude.y, latitude.x))
+
+```
+   
+We then calculated the minimum distance between a Denny's and La Quinta for each Denny's location. To do so we group by Denny's locations and calculate a new variable that stores the information for the minimum distance.
+
+```{r}
+dn_lq_ak_mindist <- dn_lq_ak %>%
+  group_by(address.x) %>%
+  summarise(closest = min(distance))
+```
+
+8. The distribution of the distances Denny's and the nearest La Quinta locations in Alaska was described using a histogram and relevant summary statistics. 
+
+```{r}
+
+summary(dn_lq_ak_mindist)
+
+ggplot(dn_lq_ak_mindist, aes(closest)) +
+  geom_histogram() +
+  ggtitle("Frequency Distribution of closest La Quinta locations in alaska")
+```
+
+
+We created two functions which are useful for this analysis. dist_df takes as argument, a "state"
+and produces the output dataframe of distances. 
+
+The second provides summary analysis of the distances generated
+
+```{r}
+
+denny_dist_df = function(state_init) {
+  
+  dn_state <- dn %>%
+    filter(state == state_init)
+  lq_state <- lq %>%
+    filter(state == state_init)
+  
+  dn_lq_state <- full_join(dn_state, lq_state, by = "state") %>% 
+                          mutate(distance = haversine(longitude.x, latitude.x, longitude.y, latitude.x))
+  
+  dn_lq_state_mindist <- dn_lq_state %>%
+    group_by(address.x) %>%
+    summarise(closest = min(distance)) %>%
+    rename(address = address.x)
+  
+  return(dn_lq_state_mindist)
+  
+}
+
+analyze_state = function(state_init) {
+  
+  dn_lq_state_mindist = denny_dist_df(state_init)
+  summary(dn_lq_state_mindist)
+  
+  ggplot(dn_lq_state_mindist, aes(closest)) +
+    geom_histogram() +
+    ggtitle(paste("Frequency Distribution of closest La Quinta locations in", state_init, sep = " ")) 
+}
+```
+
+9.The same analysis was repeated for North Carolina, Texas and California
+
+
+
+```{r}
+
+analyze_state("NC")
+analyze_state("TX")
+analyze_state("CA")
+
+```
+
+
+Of the states examined, The joke holds true the most in California. As can from the histogram, the distribution in california is very left-tailed.
+Moreover, from the summary statistics it is seen that the median distance is 2 km (or 1.2 miles) indicating close proximity between denny's and la quinta
+locations.
+
+## Monday assignment
+
+
+
+Let us grab the 10000 US restaurants dataset which was downloadad and added to the local path
+
+### Load restuarant dataset
+```{r}
+
+rest_df <- read_csv("data/FastFoodRestaurants.csv")
+
+```
+
+Now we are creating a function that takes a "state" as input and produces a dataframe, where there is one observation per "la quinta" and it lists distance to nearest "Restaurant". The function is pulling a sample from the state of interest and the sample size is the same as the number of Denny's in the state
+
+
+  
+```{r}
+rest_dist_df = function(state_init) {
+  
+  dn_state <- dn %>%
+    filter(state == state_init)
+  lq_state <- lq %>%
+    filter(state == state_init)
+  
+  rest_state <- rest_df %>% 
+    rename(state = province) %>%
+    filter(state == state_init) %>%
+    sample_n(nrow(dn_state))
+    
+  
+  rest_lq_state <- full_join(rest_state, lq_state, by = "state") %>% 
+                          mutate(distance = haversine(longitude.x, latitude.x, longitude.y, latitude.x))
+  
+  rest_lq_state_mindist <- rest_lq_state %>%
+    group_by(address.x) %>%
+    summarise(closest = min(distance)) %>%
+    rename(address = address.x)
+  
+  return(rest_lq_state_mindist)
+  
+  
+  
+}
+
+```
+
+Here is an example of the function with Alaska
+
+```{r}
+
+rest_lq_df = rest_dist_df("AK")
+
+```
+    
+Now, we are performing a comparative analysis with denny's and the "average" restaurant. To do so we will merge the minimum distance with 
+dennys and the average restaurant and visualize the comparative analysis
+
+```{r}
+
+
+comp_state = function(state_init) {
+  
+  dennys_mindist <- denny_dist_df(state_init) %>%
+    mutate(type = "dennys")
+  rest_mindist <- rest_dist_df(state_init) %>%
+    mutate(type = "restaurant")
+  
+  comb_df <- rbind(dennys_mindist, rest_mindist)
+  
+  return(comb_df)
+ 
+}
+```
+
+
+```{r}
+
+comb_df <- comp_state("AK")
+
+avg_df <- comb_df %>%
+    group_by(type) %>%
+    summarize(avg = median(closest))
+  
+  
+ggplot(comb_df, aes(x=closest, fill=type)) +
+  geom_histogram(binwidth=.5, alpha=.5, position="identity") +
+  geom_vline(data=avg_df, aes(xintercept=avg,  colour=type),
+             linetype="dashed", size=1)
+  
+```
+
+```
